@@ -1,0 +1,13 @@
+__pycache__/
+
+# Virtual environments
+venv/
+.env/
+
+# Streamlit
+.streamlit/
+
+# Data
+posts.csv
+uploads/*
+.streamlit/secrets.toml

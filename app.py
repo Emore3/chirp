@@ -11,8 +11,10 @@ st.set_page_config(
 
 # Navigation setup (using Streamlit 1.36+ st.navigation)
 def main():
+    # Sidebar Header (Above navigation)
     st.sidebar.title("🐦 Chirp")
     st.sidebar.markdown("Your smart social media orchestrator.")
+    st.sidebar.markdown("---")
     
     # Define pages
     create_page = st.Page("ui/pages/create.py", title="Create Post", icon="✍️")
@@ -27,10 +29,11 @@ if __name__ == "__main__":
     # Ensure ui/pages directory exists for dummy files
     os.makedirs("ui/pages", exist_ok=True)
     # Create empty files so streamlit doesn't crash before we build them
-    for page in ["create.py", "dashboard.py", "settings.py"]:
+    for page in ["dashboard.py", "create.py", "settings.py"]:
         path = f"ui/pages/{page}"
         if not os.path.exists(path):
             with open(path, "w") as f:
-                f.write(f"import streamlit as st\nst.title('{page.replace('.py', '').capitalize()}')")
+                # f.write(f"import streamlit as st\nst.title('{page.replace('.py', '').capitalize()}')")
+                pass
                 
     main()

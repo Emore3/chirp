@@ -4,7 +4,7 @@ from typing import Optional, List
 from PIL import Image
 
 # Initialize Gemini model
-MODEL_NAME = "gemini-1.5-flash"
+MODEL_NAME = "gemini-2.5-flash"
 
 def setup_gemini(api_key: str):
     """Initializes the Gemini API client with the given API key."""
@@ -34,11 +34,13 @@ def generate_social_post(
         constraints = "Make it conversational and engaging to encourage comments. Use 2-3 hashtags."
 
     # Construct prompt
-    prompt = [f"You are an expert social media manager."]
+    prompt = [
+        "You are an expert social media manager. Your task is to write a social media post.",
+        "IMPORTANT: Return ONLY the final post content. Do NOT include any introductory text, conversational filler (e.g., 'Here is your post'), or placeholders like '[Attached Image]'.",
+    ]
     
     if image_path and os.path.exists(image_path):
-        prompt.append(f"Based on the attached image and the topic: '{topic}'")
-        prompt.append(f"Write a {tone.lower()} social media post for {platform}.")
+        prompt.append(f"Based on the attached image and the topic: '{topic}', write a {tone.lower()} social media post for {platform}.")
         prompt.append(constraints)
         try:
             img = Image.open(image_path)
@@ -54,4 +56,15 @@ def generate_social_post(
         response = model.generate_content(prompt)
         return response.text.strip()
     except Exception as e:
-        return f"AI Generation Error: {str(e)}"
+        available_models = []
+        try:
+            for m in genai.list_models():
+                if 'generateContent' in m.supported_generation_methods:
+                    available_models.append(m.name.replace('models/', ''))
+        except:
+            pass
+        
+        err_msg = f"AI Generation Error: {str(e)}"
+        if available_models:
+            err_msg += f"\n\nAvailable models on your key: {', '.join(available_models)}"
+        return err_msg

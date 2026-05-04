@@ -15,11 +15,11 @@ def ensure_csv_exists():
             "id", "content", "platform", "tone", "status", "scheduled_time", 
             "image_path", "likes", "shares", "comments", "created_at"
         ])
-        df.to_csv(CSV_FILE_PATH, index=False)
+        df.to_csv(CSV_FILE_PATH, index=False, encoding="utf-8")
 
 def get_all_posts() -> List[SocialPost]:
     ensure_csv_exists()
-    df = pd.read_csv(CSV_FILE_PATH)
+    df = pd.read_csv(CSV_FILE_PATH, encoding="utf-8")
     posts = []
     for _, row in df.iterrows():
         # Handle nan values from csv gracefully
@@ -59,10 +59,10 @@ def save_post(post: SocialPost):
         new_row = pd.DataFrame([post_dict])
         df = pd.concat([df, new_row], ignore_index=True)
         
-    df.to_csv(CSV_FILE_PATH, index=False)
+    df.to_csv(CSV_FILE_PATH, index=False, encoding="utf-8")
 
 def delete_post(post_id: str):
     ensure_csv_exists()
-    df = pd.read_csv(CSV_FILE_PATH)
+    df = pd.read_csv(CSV_FILE_PATH, encoding="utf-8")
     df = df[df["id"] != post_id]
-    df.to_csv(CSV_FILE_PATH, index=False)
+    df.to_csv(CSV_FILE_PATH, index=False, encoding="utf-8")

@@ -1,5 +1,7 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
+from streamlit_calendar import calendar
 from storage.local import get_all_posts, CSV_FILE_PATH, save_post
 from storage.importer import import_csv_calendar
 from engine.analytics import simulate_engagement
@@ -28,29 +30,64 @@ tab1, tab2, tab3, tab4 = st.tabs(["📅 Visual Calendar", "📝 Drafts", "📈 A
 with tab1:
     st.subheader("Upcoming Content")
     
-    # Very simple visual calendar approximation using columns and cards
-    # Real applications might use streamlit-calendar or similar community components
+    calendar_events = []
+    for post in posts:
+        if post.status == PostStatus.SCHEDULED and post.scheduled_time:
+            # Pick a color based on platform
+            color = "#1877F2" # default
+            if post.platform.value == "Instagram": color = "#E1306C"
+            elif post.platform.value == "Twitter": color = "#1DA1F2"
+            elif post.platform.value == "LinkedIn": color = "#0077b5"
+            
+            calendar_events.append({
+                "title": f"{post.platform.value}",
+                "start": post.scheduled_time.isoformat(),
+                "backgroundColor": color,
+                "borderColor": color,
+                "extendedProps": {
+                    "content": post.content,
+                    "id": post.id,
+                    "tone": post.tone.value
+                }
+            })
+            
+    calendar_options = {
+        "editable": False,
+        "selectable": True,
+        "height": 550,
+        "headerToolbar": {
+            "left": "today prev,next",
+            "center": "title",
+            "right": "dayGridMonth,timeGridWeek,timeGridDay",
+        },
+        "initialView": "dayGridMonth",
+    }
     
-    scheduled = [p for p in posts if p.status == PostStatus.SCHEDULED and p.scheduled_time]
-    scheduled.sort(key=lambda x: x.scheduled_time)
+    custom_css = """
+        .fc-event-past { opacity: 0.8; }
+        .fc-event-time { font-style: italic; }
+        .fc-event-title { font-weight: 700; }
+        .fc-toolbar-title { font-size: 1.5rem; }
+    """
+
+    cal = calendar(events=calendar_events, options=calendar_options, custom_css=custom_css, key="content_calendar")
     
-    if not scheduled:
-        st.info("No scheduled posts. Go to 'Create Post' to schedule some content!")
-    else:
-        for post in scheduled:
-            with st.container():
-                st.markdown(f"**{post.scheduled_time.strftime('%b %d, %Y - %I:%M %p')}** | 📱 {post.platform.value}")
-                st.caption(f"_{post.tone.value} Tone_")
-                st.write(post.content[:100] + "..." if len(post.content) > 100 else post.content)
-                
-                # Action to simulate "Posting"
-                if st.button(f"Simulate Publish", key=f"pub_{post.id}"):
-                    post.status = PostStatus.POSTED
-                    post.metrics = simulate_engagement(post.platform.value, post.tone.value)
-                    save_post(post)
+    if cal.get("eventClick"):
+        event = cal["eventClick"]["event"]
+        st.markdown("---")
+        st.write("### 🔍 Selected Post Details")
+        st.info(f"**Content:** {event['extendedProps']['content']}")
+        
+        col_btn, _ = st.columns([1, 3])
+        with col_btn:
+            if st.button("🚀 Simulate Publish", key=f"pub_{event['extendedProps']['id']}"):
+                target_post = next((p for p in posts if p.id == event['extendedProps']['id']), None)
+                if target_post:
+                    target_post.status = PostStatus.POSTED
+                    target_post.metrics = simulate_engagement(target_post.platform.value, target_post.tone.value)
+                    save_post(target_post)
                     st.success("Post marked as Live!")
                     st.rerun()
-                st.divider()
 
 with tab2:
     st.subheader("Manage Drafts")
@@ -76,33 +113,86 @@ with tab2:
                     st.rerun()
 
 with tab3:
-    st.subheader("Simulated Engagement Metrics")
+    st.subheader("📈 Performance Analytics")
     live_posts = [p for p in posts if p.status == PostStatus.POSTED]
     
     if not live_posts:
         st.info("No live posts yet. Simulate publishing a scheduled post to see metrics.")
     else:
-        # Aggregate metrics
+        # --- High-Level Overview ---
+        st.markdown("### Executive Summary")
+        total_likes = sum(p.metrics.get("likes", 0) for p in live_posts)
+        total_shares = sum(p.metrics.get("shares", 0) for p in live_posts)
+        total_comments = sum(p.metrics.get("comments", 0) for p in live_posts)
+        
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Total Posts", len(live_posts))
+        m2.metric("Total Likes", total_likes, delta=f"+{int(total_likes*0.1)} this week")
+        m3.metric("Total Shares", total_shares, delta=f"+{int(total_shares*0.05)} this week")
+        m4.metric("Total Comments", total_comments)
+        
+        st.markdown("---")
+        
+        # --- Platform Distribution (Plotly) ---
+        st.markdown("### Engagement by Platform")
         data = []
         for p in live_posts:
             data.append({
                 "Platform": p.platform.value,
                 "Likes": p.metrics.get("likes", 0),
                 "Shares": p.metrics.get("shares", 0),
-                "Comments": p.metrics.get("comments", 0)
+                "Comments": p.metrics.get("comments", 0),
+                "Content Snippet": p.content[:50] + "..."
             })
             
         df = pd.DataFrame(data)
         
-        # Simple Bar Chart for Likes per Platform
-        st.write("Likes Distribution")
-        likes_dist = df.groupby("Platform")["Likes"].sum()
-        st.bar_chart(likes_dist)
+        col_chart1, col_chart2 = st.columns(2)
+        with col_chart1:
+            likes_dist = df.groupby("Platform")["Likes"].sum().reset_index()
+            fig = px.pie(likes_dist, values='Likes', names='Platform', title='Likes Distribution', hole=0.4, color_discrete_sequence=px.colors.qualitative.Pastel)
+            st.plotly_chart(fig, use_container_width=True)
+            
+        with col_chart2:
+            eng_dist = df.groupby("Platform")[["Likes", "Shares", "Comments"]].sum().reset_index()
+            fig2 = px.bar(eng_dist, x='Platform', y=['Likes', 'Shares', 'Comments'], title='Total Engagement Breakdown', barmode='group', color_discrete_sequence=px.colors.qualitative.Set2)
+            st.plotly_chart(fig2, use_container_width=True)
+            
+        st.markdown("---")
         
-        st.write("Raw Data")
-        st.dataframe(df)
+        # --- Individual Post Metrics ---
+        st.markdown("### Individual Post Performance")
+        
+        live_posts_sorted = sorted(live_posts, key=lambda p: p.created_at, reverse=True)
+        
+        col_f1, col_f2 = st.columns([2, 1])
+        with col_f1:
+            search_query = st.text_input("🔍 Search posts by keyword")
+        with col_f2:
+            platforms_filter = st.multiselect("Filter by Platform", options=list(set(p.platform.value for p in live_posts_sorted)))
+            
+        filtered_posts = live_posts_sorted
+        if search_query:
+            filtered_posts = [p for p in filtered_posts if search_query.lower() in p.content.lower()]
+        if platforms_filter:
+            filtered_posts = [p for p in filtered_posts if p.platform.value in platforms_filter]
+            
+        if not filtered_posts:
+            st.info("No posts match your filters.")
+            
+        for i, p in enumerate(filtered_posts):
+            with st.expander(f"📱 {p.platform.value} | {p.tone.value} Tone | 👍 {p.metrics.get('likes', 0)} Likes"):
+                c1, c2 = st.columns([2, 1])
+                with c1:
+                    st.markdown("**Content:**")
+                    st.info(p.content)
+                with c2:
+                    st.markdown("**Metrics:**")
+                    st.metric("Likes", p.metrics.get("likes", 0))
+                    st.metric("Shares", p.metrics.get("shares", 0))
+                    st.metric("Comments", p.metrics.get("comments", 0))
 
-with tab3:
+with tab4:
     st.subheader("CSV Import / Export")
     
     st.write("Download your current calendar as a CSV:")

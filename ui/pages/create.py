@@ -66,21 +66,28 @@ with st.container(border=True):
                     f.write(uploaded_image.getbuffer())
             
             with st.spinner("Gemini is crafting your posts..."):
-                for p in platforms:
-                    content = generate_social_post(
-                        topic=topic or "Write a caption for this image",
-                        platform=p,
-                        tone=tone,
-                        image_path=image_path
-                    )
-                    st.session_state.drafts[p] = {
-                        "content": content,
-                        "image_path": image_path,
-                        "tone": tone
-                    }
-                    # Manually update the widget's session state key to show the new content
-                    st.session_state[f"edit_{p}"] = content
-            st.success("Drafts generated!")
+                results = generate_social_post(
+                    topic=topic or "Write a caption for this image",
+                    platforms=platforms,
+                    tone=tone,
+                    image_path=image_path
+                )
+                if "error" in results:
+                    st.error(results["error"])
+                else:
+                    for p in platforms:
+                        data = results.get(p, {})
+                        content = data.get("content", f"Error: No content generated for {p}")
+                        optimal_time_str = data.get("optimal_time", "12:00")
+                        st.session_state.drafts[p] = {
+                            "content": content,
+                            "image_path": image_path,
+                            "tone": tone,
+                            "optimal_time": optimal_time_str
+                        }
+                        # Manually update the widget's session state key to show the new content
+                        st.session_state[f"edit_{p}"] = content
+                    st.success("Drafts generated!")
 
 # --- Output Section ---
 if st.session_state.drafts:
@@ -116,9 +123,22 @@ if st.session_state.drafts:
                 # Sub-container for scheduling
                 with st.container(border=True):
                     st.markdown("**Schedule for Later**")
+                    
+                    try:
+                        # Parsing AI suggested time (e.g. "14:30")
+                        opt_time_str = data.get("optimal_time", "12:00").replace(' AM', '').replace(' PM', '').strip()
+                        # Handling potentially messy AI output by just grabbing first two numbers if split doesn't work perfectly
+                        import re
+                        nums = re.findall(r'\d+', opt_time_str)
+                        hour = int(nums[0]) if len(nums) > 0 else 12
+                        minute = int(nums[1]) if len(nums) > 1 else 0
+                        default_time = datetime.now().replace(hour=hour % 24, minute=minute % 60, second=0, microsecond=0).time()
+                    except Exception:
+                        default_time = datetime.now().time()
+                        
                     c1, c2 = st.columns(2)
                     d = c1.date_input("Select Date", key=f"date_{platform_name}")
-                    t = c2.time_input("Select Time", key=f"time_{platform_name}")
+                    t = c2.time_input("Select Time", value=default_time, key=f"time_{platform_name}")
                     
                     if st.button(f"⏰ Schedule {platform_name} Post", key=f"btn_sched_{platform_name}", use_container_width=True):
                         dt = datetime.combine(d, t)
